@@ -1,31 +1,17 @@
 <?php
-// api/ig-profile.php
 declare(strict_types=1);
 
-// ---- Configuration ----
-/**
- * Yahan apna Instagram ka poora cookie string paste karein.
- * Yeh script poori tarah is cookie par nirbhar hai.
- * Example: 'sessionid=...; csrftoken=...; ds_user_id=...; ig_did=...'
- */
 $sessionCookie = 'sessionid=77092081202%3AwEvEAwKyiMUsFs%3A20%3AAYdVy9ADzLky88EQZh0zZGAacud2L9Wpb5x413YK-Q; csrftoken=G8m03XzWMhx1Ji34aGQ6Tg; ds_user_id=77092081202; ig_did=26E4F7C8-BCA4-47AD-B905-917F2CF04C18';
 
-
-// ---- Core Logic ----
-
-// Always return JSON
 header('Content-Type: application/json; charset=utf-8');
 
-// Preflight for CORS
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
     exit;
 }
 
-// Helper: JSON output
 function json_out(int $code, array $data) {
     http_response_code($code);
-    // Add attribution before final output
     if ($code === 200) {
         $data['api_by'] = '@colossals';
     }
@@ -33,7 +19,6 @@ function json_out(int $code, array $data) {
     exit;
 }
 
-// Helper: cURL executor
 function execute_curl(string $endpoint, string $cookie): array {
     $ch = curl_init($endpoint);
     $headers = [
@@ -41,16 +26,14 @@ function execute_curl(string $endpoint, string $cookie): array {
         'X-IG-App-ID: 936619743392459',
         'Accept: application/json, text/plain, */*',
         'Accept-Language: en-US,en;q=0.9',
-        'Referer: https://www.instagram.com/'
     ];
 
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_TIMEOUT => 15,
-        CURLOPT_CONNECTTIMEOUT => 7,
-        CURLOPT_HTTPHEADER => $headers,
-        CURLOPT_COOKIE => $cookie,
+        CURLOPT_TIMEOUT        => 15,
+        CURLOPT_HTTPHEADER     => $headers,
+        CURLOPT_COOKIE         => $cookie,
     ]);
 
     $raw = curl_exec($ch);
@@ -61,48 +44,38 @@ function execute_curl(string $endpoint, string $cookie): array {
     return ['raw' => $raw, 'code' => $code, 'error' => $err];
 }
 
-// ---- Prerequisite Check ----
 if (empty($sessionCookie)) {
-    json_out(500, ['status' => 'error', 'message' => 'Server configuration error: Session cookie is not set.']);
+    json_out(500, ['status' => 'error', 'message' => 'Server Error: Instagram session cookie configure nahi kiya gaya hai.']);
 }
 
-// ---- Input Validation ----
 $username = isset($_GET['username']) ? trim((string)$_GET['username']) : '';
 if ($username === '') {
-    json_out(400, ['status' => 'error', 'message' => 'Missing "username" query parameter']);
+    json_out(400, ['status' => 'error', 'message' => 'Error: "username" parameter missing.']);
 }
 if (!preg_match('/^[a-zA-Z0-9._]{1,30}$/', $username)) {
-    json_out(400, ['status' => 'error', 'message' => 'Invalid username format']);
+    json_out(400, ['status' => 'error', 'message' => 'Error: Invalid username format.']);
 }
 
-// ---- Fetching Logic (Session-Only) ----
-
-// Step 1: Fetch primary user data to get the User ID (PK)
 $endpoint_web_profile = 'https://i.instagram.com/api/v1/users/web_profile_info/?username=' . urlencode($username);
 $response = execute_curl($endpoint_web_profile, $sessionCookie);
 
-// Handle cURL-level errors
 if ($response['raw'] === false) {
     json_out(503, ['status' => 'error', 'message' => 'Upstream fetch failed', 'detail' => $response['error']]);
 }
-
-// Handle HTTP errors from Instagram (e.g., 401 Unauthorized if cookie is bad)
 if ($response['code'] >= 400) {
-    $message = 'Instagram API returned an error. This might mean the session cookie is invalid or expired.';
+    $message = 'Instagram API Error. Ho sakta hai aapka session cookie invalid ya expire ho gaya ho.';
     json_out($response['code'], ['status' => 'error', 'message' => $message, 'http_code' => $response['code']]);
 }
 
-// ---- Parsing Logic ----
 $payload = json_decode($response['raw'], true);
-if (!is_array($payload) || empty($payload['data']['user'])) {
-    json_out(404, ['status' => 'error', 'message' => 'Profile not found or data is unavailable']);
+if (empty($payload['data']['user'])) {
+    json_out(404, ['status' => 'error', 'message' => 'Profile not found.']);
 }
 
 $u = $payload['data']['user'];
 $user_pk = $u['id'] ?? null;
 $created_at_timestamp = null;
 
-// Step 2: If we have the user ID (pk), fetch additional details like creation date
 if ($user_pk) {
     $endpoint_user_info = 'https://i.instagram.com/api/v1/users/' . $user_pk . '/info/';
     $info_response = execute_curl($endpoint_user_info, $sessionCookie);
@@ -110,12 +83,10 @@ if ($user_pk) {
     if ($info_response['code'] === 200) {
         $info_payload = json_decode($info_response['raw'], true);
         if (!empty($info_payload['user']['pk_create_date'])) {
-             $created_at_timestamp = $info_payload['user']['pk_create_date'];
+             $created_at_timestamp = (int)$info_payload['user']['pk_create_date'];
         }
     }
 }
-
-// ---- Normalization & Output ----
 
 $result = [
     'status' => 'ok',
@@ -126,32 +97,16 @@ $result = [
         'full_name' => $u['full_name'] ?? null,
         'biography' => $u['biography'] ?? null,
         'external_url' => $u['external_url'] ?? null,
-        'is_private' => $u['is_private'] ?? null,
-        'is_verified' => $u['is_verified'] ?? null,
-        'is_business_account' => $u['is_business_account'] ?? null,
-        'is_professional_account' => $u['is_professional_account'] ?? null,
-        'category_name' => $u['category_name'] ?? null,
-        'business_category_name' => $u['business_category_name'] ?? null,
-        'profile_pic_url' => $u['profile_pic_url'] ?? null,
+        'is_private' => (bool)($u['is_private'] ?? null),
+        'is_verified' => (bool)($u['is_verified'] ?? null),
+        'is_business_account' => (bool)($u['is_business_account'] ?? null),
         'profile_pic_url_hd' => $u['profile_pic_url_hd'] ?? null,
-        'follower_count' => $u['edge_followed_by']['count'] ?? null,
-        'following_count' => $u['edge_follow']['count'] ?? null,
-        'post_count' => $u['edge_owner_to_timeline_media']['count'] ?? null,
+        'follower_count' => (int)($u['edge_followed_by']['count'] ?? 0),
+        'following_count' => (int)($u['edge_follow']['count'] ?? 0),
+        'post_count' => (int)($u['edge_owner_to_timeline_media']['count'] ?? 0),
         'created_at_unix' => $created_at_timestamp,
         'created_at_utc' => $created_at_timestamp ? gmdate('c', $created_at_timestamp) : null,
     ]
 ];
-
-// Optional field filtering
-if (isset($_GET['fields']) && $_GET['fields'] !== '') {
-    $requested = array_filter(array_map('trim', explode(',', (string)$_GET['fields'])));
-    $filtered = [];
-    foreach ($requested as $key) {
-        if (array_key_exists($key, $result['profile'])) {
-            $filtered[$key] = $result['profile'][$key];
-        }
-    }
-    $result['profile'] = $filtered;
-}
 
 json_out(200, $result);
