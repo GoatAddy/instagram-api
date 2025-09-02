@@ -26,6 +26,9 @@ function execute_curl(string $endpoint, string $cookie): array {
         'X-IG-App-ID: 936619743392459',
         'Accept: application/json, text/plain, */*',
         'Accept-Language: en-US,en;q=0.9',
+        'X-Requested-With: XMLHttpRequest',
+        'Origin: https://www.instagram.com',
+        'Referer: https://www.instagram.com/',
     ];
 
     curl_setopt_array($ch, [
@@ -49,8 +52,6 @@ if (empty($sessionCookie)) {
 }
 
 $username = isset($_GET['username']) ? trim((string)$_GET['username']) : '';
-$isDebug = isset($_GET['debug']) && $_GET['debug'] === 'true';
-
 if ($username === '') {
     json_out(400, ['status' => 'error', 'message' => 'Error: "username" parameter missing.']);
 }
@@ -65,7 +66,7 @@ if ($response['raw'] === false) {
     json_out(503, ['status' => 'error', 'message' => 'Upstream fetch failed', 'detail' => $response['error']]);
 }
 if ($response['code'] >= 400) {
-    $message = 'Instagram API Error (First Call). Ho sakta hai aapka session cookie invalid ya expire ho gaya ho.';
+    $message = 'Instagram API Error. Ho sakta hai aapka session cookie invalid ya expire ho gaya ho.';
     json_out($response['code'], ['status' => 'error', 'message' => $message, 'http_code' => $response['code']]);
 }
 
@@ -78,27 +79,37 @@ $u = $payload['data']['user'];
 $user_pk = $u['id'] ?? null;
 $created_at_timestamp = null;
 
+// Try multiple methods to get the creation date
 if ($user_pk) {
+    // Method 1: Try the user info endpoint
     $endpoint_user_info = 'https://i.instagram.com/api/v1/users/' . $user_pk . '/info/';
     $info_response = execute_curl($endpoint_user_info, $sessionCookie);
-
-    if ($isDebug) {
-        header('Content-Type: text/plain; charset=utf-8');
-        echo "---- DEBUG MODE ----\n\n";
-        echo "Endpoint for Creation Date: " . $endpoint_user_info . "\n";
-        echo "HTTP Code from this endpoint: " . $info_response['code'] . "\n\n";
-        echo "Raw Response Body:\n";
-        echo "--------------------\n";
-        print_r($info_response['raw']);
-        echo "\n--------------------\n";
-        exit;
-    }
-
+    
     if ($info_response['code'] === 200) {
         $info_payload = json_decode($info_response['raw'], true);
-        if (!empty($info_payload['user']['pk_create_date'])) {
-             $created_at_timestamp = (int)$info_payload['user']['pk_create_date'];
+        if (!empty($info_payload['user']['account_created_date'])) {
+            $created_at_timestamp = (int)$info_payload['user']['account_created_date'];
+        } elseif (!empty($info_payload['user']['pk_create_date'])) {
+            $created_at_timestamp = (int)$info_payload['user']['pk_create_date'];
         }
+    }
+    
+    // Method 2: If first method failed, try the user detail endpoint
+    if (!$created_at_timestamp) {
+        $endpoint_user_detail = 'https://i.instagram.com/api/v1/users/' . $user_pk . '/detail/';
+        $detail_response = execute_curl($endpoint_user_detail, $sessionCookie);
+        
+        if ($detail_response['code'] === 200) {
+            $detail_payload = json_decode($detail_response['raw'], true);
+            if (!empty($detail_payload['user']['account_created_date'])) {
+                $created_at_timestamp = (int)$detail_payload['user']['account_created_date'];
+            }
+        }
+    }
+    
+    // Method 3: If still not found, try to extract from the first API response
+    if (!$created_at_timestamp && !empty($u['created_at'])) {
+        $created_at_timestamp = (int)$u['created_at'];
     }
 }
 
