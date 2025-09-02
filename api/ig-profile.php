@@ -92,13 +92,12 @@ $followers = safe_val($u['edge_followed_by']['count'] ?? null);
 $following = safe_val($u['edge_follow']['count'] ?? null);
 $posts     = safe_val($u['edge_owner_to_timeline_media']['count'] ?? null);
 
-// Build normalized response (without api_by first)
+// Build normalized response (without external_url and urls)
 $profile = [
     'id' => safe_val($u['id'] ?? null),
     'username' => safe_val($u['username'] ?? null),
     'full_name' => safe_val($u['full_name'] ?? null),
     'biography' => safe_val($u['biography'] ?? null),
-    'external_url' => safe_val($u['external_url'] ?? null),
     'is_private' => safe_val($u['is_private'] ?? null),
     'is_verified' => safe_val($u['is_verified'] ?? null),
     'is_business_account' => safe_val($u['is_business_account'] ?? null),
@@ -110,13 +109,6 @@ $profile = [
         'followers' => $followers,
         'following' => $following,
         'posts'     => $posts
-    ],
-    'urls' => [
-        'profile'   => "https://www.instagram.com/{$username}/",
-        'reels'     => "https://www.instagram.com/{$username}/reels/",
-        'posts'     => "https://www.instagram.com/{$username}/posts/",
-        'stories'   => "https://www.instagram.com/stories/{$username}/",
-        'highlights'=> "https://www.instagram.com/stories/highlights/"
     ]
 ];
 
@@ -136,8 +128,6 @@ if (isset($_GET['fields']) && $_GET['fields'] !== '') {
     foreach ($requested as $key) {
         if ($key === 'edge_counts') {
             $filtered['edge_counts'] = $profile['edge_counts'];
-        } elseif ($key === 'urls') {
-            $filtered['urls'] = $profile['urls'];
         } elseif (array_key_exists($key, $profile)) {
             $filtered[$key] = $profile[$key];
         }
