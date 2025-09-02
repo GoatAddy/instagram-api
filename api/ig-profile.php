@@ -92,36 +92,42 @@ $followers = safe_val($u['edge_followed_by']['count'] ?? null);
 $following = safe_val($u['edge_follow']['count'] ?? null);
 $posts     = safe_val($u['edge_owner_to_timeline_media']['count'] ?? null);
 
-// Build normalized response
+// Build normalized response (without api_by first)
+$profile = [
+    'id' => safe_val($u['id'] ?? null),
+    'username' => safe_val($u['username'] ?? null),
+    'full_name' => safe_val($u['full_name'] ?? null),
+    'biography' => safe_val($u['biography'] ?? null),
+    'external_url' => safe_val($u['external_url'] ?? null),
+    'is_private' => safe_val($u['is_private'] ?? null),
+    'is_verified' => safe_val($u['is_verified'] ?? null),
+    'is_business_account' => safe_val($u['is_business_account'] ?? null),
+    'is_professional_account' => safe_val($u['is_professional_account'] ?? null),
+    'category_name' => safe_val($u['category_name'] ?? null),
+    'business_category_name' => safe_val($u['business_category_name'] ?? null),
+    'profile_pic_url_hd' => safe_val($u['profile_pic_url_hd'] ?? null),
+    'edge_counts' => [
+        'followers' => $followers,
+        'following' => $following,
+        'posts'     => $posts
+    ],
+    'urls' => [
+        'profile'   => "https://www.instagram.com/{$username}/",
+        'reels'     => "https://www.instagram.com/{$username}/reels/",
+        'posts'     => "https://www.instagram.com/{$username}/posts/",
+        'stories'   => "https://www.instagram.com/stories/{$username}/",
+        'highlights'=> "https://www.instagram.com/stories/highlights/"
+    ]
+];
+
+// Add api_by always at the end
+$profile['api_by'] = "https://t.me/colossals";
+
 $result = [
     'status' => 'ok',
     'collected_at' => gmdate('c'),
-    'profile' => [
-        'id' => safe_val($u['id'] ?? null),
-        'username' => safe_val($u['username'] ?? null),
-        'full_name' => safe_val($u['full_name'] ?? null),
-        'biography' => safe_val($u['biography'] ?? null),
-        'external_url' => safe_val($u['external_url'] ?? null),
-        'is_private' => safe_val($u['is_private'] ?? null),
-        'is_verified' => safe_val($u['is_verified'] ?? null),
-        'is_business_account' => safe_val($u['is_business_account'] ?? null),
-        'is_professional_account' => safe_val($u['is_professional_account'] ?? null),
-        'category_name' => safe_val($u['category_name'] ?? null),
-        'business_category_name' => safe_val($u['business_category_name'] ?? null),
-        'profile_pic_url_hd' => safe_val($u['profile_pic_url_hd'] ?? null),
-        'edge_counts' => [
-            'followers' => $followers,
-            'following' => $following,
-            'posts'     => $posts
-],        
-'urls' => [
-    'profile'   => "https://www.instagram.com/{$username}/",
-    'reels'     => "https://www.instagram.com/{$username}/reels/",
-    'posts'     => "https://www.instagram.com/{$username}/posts/",
-    'stories'   => "https://www.instagram.com/stories/{$username}/",
-    'highlights'=> "https://www.instagram.com/stories/highlights/"
-],
-'api_by' => "https://t.me/colossals"
+    'profile' => $profile
+];
 
 // Optional field filter: ?fields=id,username,edge_counts
 if (isset($_GET['fields']) && $_GET['fields'] !== '') {
@@ -129,13 +135,15 @@ if (isset($_GET['fields']) && $_GET['fields'] !== '') {
     $filtered = [];
     foreach ($requested as $key) {
         if ($key === 'edge_counts') {
-            $filtered['edge_counts'] = $result['profile']['edge_counts'];
+            $filtered['edge_counts'] = $profile['edge_counts'];
         } elseif ($key === 'urls') {
-            $filtered['urls'] = $result['profile']['urls'];
-        } elseif (array_key_exists($key, $result['profile'])) {
-            $filtered[$key] = $result['profile'][$key];
+            $filtered['urls'] = $profile['urls'];
+        } elseif (array_key_exists($key, $profile)) {
+            $filtered[$key] = $profile[$key];
         }
     }
+    // Ensure api_by stays at bottom even after filtering
+    $filtered['api_by'] = "https://t.me/colossals";
     $result['profile'] = $filtered;
 }
 
