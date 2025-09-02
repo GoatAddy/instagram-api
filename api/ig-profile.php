@@ -26,9 +26,6 @@ function execute_curl(string $endpoint, string $cookie): array {
         'X-IG-App-ID: 936619743392459',
         'Accept: application/json, text/plain, */*',
         'Accept-Language: en-US,en;q=0.9',
-        'X-Requested-With: XMLHttpRequest',
-        'Origin: https://www.instagram.com',
-        'Referer: https://www.instagram.com/',
     ];
 
     curl_setopt_array($ch, [
@@ -79,37 +76,12 @@ $u = $payload['data']['user'];
 $user_pk = $u['id'] ?? null;
 $created_at_timestamp = null;
 
-// Try multiple methods to get the creation date
-if ($user_pk) {
-    // Method 1: Try the user info endpoint
-    $endpoint_user_info = 'https://i.instagram.com/api/v1/users/' . $user_pk . '/info/';
-    $info_response = execute_curl($endpoint_user_info, $sessionCookie);
-    
-    if ($info_response['code'] === 200) {
-        $info_payload = json_decode($info_response['raw'], true);
-        if (!empty($info_payload['user']['account_created_date'])) {
-            $created_at_timestamp = (int)$info_payload['user']['account_created_date'];
-        } elseif (!empty($info_payload['user']['pk_create_date'])) {
-            $created_at_timestamp = (int)$info_payload['user']['pk_create_date'];
-        }
-    }
-    
-    // Method 2: If first method failed, try the user detail endpoint
-    if (!$created_at_timestamp) {
-        $endpoint_user_detail = 'https://i.instagram.com/api/v1/users/' . $user_pk . '/detail/';
-        $detail_response = execute_curl($endpoint_user_detail, $sessionCookie);
-        
-        if ($detail_response['code'] === 200) {
-            $detail_payload = json_decode($detail_response['raw'], true);
-            if (!empty($detail_payload['user']['account_created_date'])) {
-                $created_at_timestamp = (int)$detail_payload['user']['account_created_date'];
-            }
-        }
-    }
-    
-    // Method 3: If still not found, try to extract from the first API response
-    if (!$created_at_timestamp && !empty($u['created_at'])) {
-        $created_at_timestamp = (int)$u['created_at'];
+// ✅ Workaround for created_at: use earliest post timestamp
+if (!empty($u['edge_owner_to_timeline_media']['edges'])) {
+    $posts = $u['edge_owner_to_timeline_media']['edges'];
+    $lastPost = end($posts); // oldest post
+    if (!empty($lastPost['node']['taken_at_timestamp'])) {
+        $created_at_timestamp = (int)$lastPost['node']['taken_at_timestamp'];
     }
 }
 
@@ -133,5 +105,4 @@ $result = [
         'created_at_utc' => $created_at_timestamp ? gmdate('c', $created_at_timestamp) : null,
     ]
 ];
-
 json_out(200, $result);
