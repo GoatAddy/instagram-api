@@ -2,12 +2,7 @@
 // api/ig-profile.php
 declare(strict_types=1);
 
-// ---- Configuration ----
-/**
- * Yahan apna Instagram ka poora cookie string paste karein.
- * Yeh zaroori hai jab public API rate-limit ho jaaye.
- * Example: 'sessionid=...; csrftoken=...; ds_user_id=...; ig_did=...'
- */
+
 $sessionCookie = 'sessionid=77092081202%3AwEvEAwKyiMUsFs%3A20%3AAYdVy9ADzLky88EQZh0zZGAacud2L9Wpb5x413YK-Q; csrftoken=G8m03XzWMhx1Ji34aGQ6Tg; ds_user_id=77092081202; ig_did=26E4F7C8-BCA4-47AD-B905-917F2CF04C18';
 
 
