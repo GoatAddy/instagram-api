@@ -5,10 +5,10 @@ header('Content-Type: application/json; charset=utf-8');
 
 // Instagram session cookies (replace with fresh ones if expired)
 $sessionCookies = [
-    "sessionid=77092081202%3AwEvEAwKyiMUsFs%3A20%3AAYdVy9ADzLky88EQZh0zZGAacud2L9Wpb5x413YK-Q",
-    "csrftoken=G8m03XzWMhx1Ji34aGQ6Tg",
-    "ds_user_id=77092081202",
-    "ig_did=26E4F7C8-BCA4-47AD-B905-917F2CF04C18"
+    "sessionid=71103686397%3ARqAxiKVpJZYVqm%3A22%3AAYflT2AOZv14o7wFWDSmZTeBU1aY6bwtYbdQVyokYQ",
+    "csrftoken=xp2CAVO8LhjlUYkIkw57qU",
+    "ds_user_id=71103686397",
+    "ig_did=E8659C5B-B87B-4C9C-AEAC-22DCCA125B90"
 ];
 $cookieString = implode("; ", $sessionCookies);
 
