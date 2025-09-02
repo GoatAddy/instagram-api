@@ -49,6 +49,8 @@ if (empty($sessionCookie)) {
 }
 
 $username = isset($_GET['username']) ? trim((string)$_GET['username']) : '';
+$isDebug = isset($_GET['debug']) && $_GET['debug'] === 'true';
+
 if ($username === '') {
     json_out(400, ['status' => 'error', 'message' => 'Error: "username" parameter missing.']);
 }
@@ -63,7 +65,7 @@ if ($response['raw'] === false) {
     json_out(503, ['status' => 'error', 'message' => 'Upstream fetch failed', 'detail' => $response['error']]);
 }
 if ($response['code'] >= 400) {
-    $message = 'Instagram API Error. Ho sakta hai aapka session cookie invalid ya expire ho gaya ho.';
+    $message = 'Instagram API Error (First Call). Ho sakta hai aapka session cookie invalid ya expire ho gaya ho.';
     json_out($response['code'], ['status' => 'error', 'message' => $message, 'http_code' => $response['code']]);
 }
 
@@ -79,6 +81,18 @@ $created_at_timestamp = null;
 if ($user_pk) {
     $endpoint_user_info = 'https://i.instagram.com/api/v1/users/' . $user_pk . '/info/';
     $info_response = execute_curl($endpoint_user_info, $sessionCookie);
+
+    if ($isDebug) {
+        header('Content-Type: text/plain; charset=utf-8');
+        echo "---- DEBUG MODE ----\n\n";
+        echo "Endpoint for Creation Date: " . $endpoint_user_info . "\n";
+        echo "HTTP Code from this endpoint: " . $info_response['code'] . "\n\n";
+        echo "Raw Response Body:\n";
+        echo "--------------------\n";
+        print_r($info_response['raw']);
+        echo "\n--------------------\n";
+        exit;
+    }
 
     if ($info_response['code'] === 200) {
         $info_payload = json_decode($info_response['raw'], true);
