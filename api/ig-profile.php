@@ -2,7 +2,12 @@
 // api/ig-profile.php
 declare(strict_types=1);
 
-
+// ---- Configuration ----
+/**
+ * Yahan apna Instagram ka poora cookie string paste karein.
+ * Yeh script poori tarah is cookie par nirbhar hai.
+ * Example: 'sessionid=...; csrftoken=...; ds_user_id=...; ig_did=...'
+ */
 $sessionCookie = 'sessionid=77092081202%3AwEvEAwKyiMUsFs%3A20%3AAYdVy9ADzLky88EQZh0zZGAacud2L9Wpb5x413YK-Q; csrftoken=G8m03XzWMhx1Ji34aGQ6Tg; ds_user_id=77092081202; ig_did=26E4F7C8-BCA4-47AD-B905-917F2CF04C18';
 
 
@@ -20,12 +25,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 // Helper: JSON output
 function json_out(int $code, array $data) {
     http_response_code($code);
+    // Add attribution before final output
+    if ($code === 200) {
+        $data['api_by'] = '@colossals';
+    }
     echo json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     exit;
 }
 
 // Helper: cURL executor
-function execute_curl(string $endpoint, ?string $cookie = null): array {
+function execute_curl(string $endpoint, string $cookie): array {
     $ch = curl_init($endpoint);
     $headers = [
         'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -35,19 +44,14 @@ function execute_curl(string $endpoint, ?string $cookie = null): array {
         'Referer: https://www.instagram.com/'
     ];
 
-    $curl_opts = [
+    curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_TIMEOUT => 15,
         CURLOPT_CONNECTTIMEOUT => 7,
         CURLOPT_HTTPHEADER => $headers,
-    ];
-
-    if ($cookie) {
-        $curl_opts[CURLOPT_COOKIE] = $cookie;
-    }
-
-    curl_setopt_array($ch, $curl_opts);
+        CURLOPT_COOKIE => $cookie,
+    ]);
 
     $raw = curl_exec($ch);
     $err = curl_error($ch);
@@ -55,6 +59,11 @@ function execute_curl(string $endpoint, ?string $cookie = null): array {
     curl_close($ch);
 
     return ['raw' => $raw, 'code' => $code, 'error' => $err];
+}
+
+// ---- Prerequisite Check ----
+if (empty($sessionCookie)) {
+    json_out(500, ['status' => 'error', 'message' => 'Server configuration error: Session cookie is not set.']);
 }
 
 // ---- Input Validation ----
@@ -66,27 +75,21 @@ if (!preg_match('/^[a-zA-Z0-9._]{1,30}$/', $username)) {
     json_out(400, ['status' => 'error', 'message' => 'Invalid username format']);
 }
 
-// ---- Fetching Logic ----
+// ---- Fetching Logic (Session-Only) ----
 
-// Step 1: Try public (anonymous) fetch first
+// Step 1: Fetch primary user data to get the User ID (PK)
 $endpoint_web_profile = 'https://i.instagram.com/api/v1/users/web_profile_info/?username=' . urlencode($username);
-$response = execute_curl($endpoint_web_profile);
-$fetch_method = 'public_api';
-
-// Step 2: If public fetch fails with a client error (like 401/429), fallback to authenticated fetch
-if ($response['code'] >= 400 && !empty($sessionCookie)) {
-    $response = execute_curl($endpoint_web_profile, $sessionCookie);
-    $fetch_method = 'authenticated_api_fallback';
-}
+$response = execute_curl($endpoint_web_profile, $sessionCookie);
 
 // Handle cURL-level errors
 if ($response['raw'] === false) {
     json_out(503, ['status' => 'error', 'message' => 'Upstream fetch failed', 'detail' => $response['error']]);
 }
 
-// Handle HTTP errors from Instagram
+// Handle HTTP errors from Instagram (e.g., 401 Unauthorized if cookie is bad)
 if ($response['code'] >= 400) {
-    json_out($response['code'], ['status' => 'error', 'message' => 'Instagram API returned an error', 'http_code' => $response['code']]);
+    $message = 'Instagram API returned an error. This might mean the session cookie is invalid or expired.';
+    json_out($response['code'], ['status' => 'error', 'message' => $message, 'http_code' => $response['code']]);
 }
 
 // ---- Parsing Logic ----
@@ -99,28 +102,24 @@ $u = $payload['data']['user'];
 $user_pk = $u['id'] ?? null;
 $created_at_timestamp = null;
 
-// Step 3: If we have the user ID (pk) and a session, fetch additional data like creation date
-if ($user_pk && !empty($sessionCookie)) {
+// Step 2: If we have the user ID (pk), fetch additional details like creation date
+if ($user_pk) {
     $endpoint_user_info = 'https://i.instagram.com/api/v1/users/' . $user_pk . '/info/';
     $info_response = execute_curl($endpoint_user_info, $sessionCookie);
 
     if ($info_response['code'] === 200) {
         $info_payload = json_decode($info_response['raw'], true);
-        // The pk_create timestamp is often available in this endpoint's user object.
         if (!empty($info_payload['user']['pk_create_date'])) {
              $created_at_timestamp = $info_payload['user']['pk_create_date'];
-             $fetch_method .= '_with_creation_date';
         }
     }
 }
-
 
 // ---- Normalization & Output ----
 
 $result = [
     'status' => 'ok',
     'collected_at' => gmdate('c'),
-    'fetch_method' => $fetch_method,
     'profile' => [
         'id' => $u['id'] ?? null,
         'username' => $u['username'] ?? null,
